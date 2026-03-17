@@ -1,63 +1,81 @@
+# -----------------------------
 # Import libraries
+# -----------------------------
 import streamlit as st
 import pandas as pd
-from snowflake.snowpark.context import get_active_session
+import snowflake.connector
 
-# Session
-session = get_active_session()
+# -----------------------------
+# Snowflake Connection
+# -----------------------------
+conn = snowflake.connector.connect(
+    user=st.secrets["SNOWFLAKE_USER"],
+    password=st.secrets["SNOWFLAKE_PASSWORD"],
+    account=st.secrets["SNOWFLAKE_ACCOUNT"],
+    warehouse="RETAIL_WH",
+    database="RETAIL_DB",
+    schema="RETAIL_SCHEMA"
+)
 
+def run_query(query):
+    return pd.read_sql(query, conn)
+
+# -----------------------------
+# Page Config
+# -----------------------------
 st.set_page_config(layout="wide")
 
 st.title("🛒 SmartMart Retail Analytics Dashboard")
+st.markdown("Interactive sales analytics powered by Snowflake")
 
 # -----------------------------
 # Load Data
 # -----------------------------
-
-region_df = session.sql("SELECT * FROM REGION_REVENUE").to_pandas()
-monthly_df = session.sql("SELECT * FROM MONTHLY_SALES").to_pandas()
-category_df = session.sql("SELECT * FROM CATEGORY_REVENUE").to_pandas()
-products_df = session.sql("SELECT * FROM TOP_10_PRODUCTS").to_pandas()
-channel_df = session.sql("SELECT * FROM CHANNEL_PERFORMANCE").to_pandas()
+region_df = run_query("SELECT * FROM REGION_REVENUE")
+monthly_df = run_query("SELECT * FROM MONTHLY_SALES")
+category_df = run_query("SELECT * FROM CATEGORY_REVENUE")
+products_df = run_query("SELECT * FROM TOP_10_PRODUCTS")
+channel_df = run_query("SELECT * FROM CHANNEL_PERFORMANCE")
 
 # -----------------------------
 # Sidebar Filters
 # -----------------------------
-
 st.sidebar.header("🔍 Filters")
 
+# Region Filter
 selected_region = st.sidebar.selectbox(
     "Select Region",
     ["All"] + list(region_df["REGION"].unique())
 )
 
+# Channel Filter
 selected_channel = st.sidebar.selectbox(
     "Sales Channel",
     ["All"] + list(channel_df["SALES_CHANNEL"].unique())
 )
 
-selected_category = st.sidebar.selectbox(
-    "Category",
-    ["All"] + list(category_df["CATEGORY"].unique())
+# Category Filter (Multi-select = checkbox style)
+selected_categories = st.sidebar.multiselect(
+    "Select Category",
+    options=list(category_df["CATEGORY"].unique()),
+    default=list(category_df["CATEGORY"].unique())
 )
 
 # -----------------------------
 # Apply Filters
 # -----------------------------
-
 if selected_region != "All":
     region_df = region_df[region_df["REGION"] == selected_region]
 
 if selected_channel != "All":
     channel_df = channel_df[channel_df["SALES_CHANNEL"] == selected_channel]
 
-if selected_category != "All":
-    category_df = category_df[category_df["CATEGORY"] == selected_category]
+if selected_categories:
+    category_df = category_df[category_df["CATEGORY"].isin(selected_categories)]
 
 # -----------------------------
 # KPI Section
 # -----------------------------
-
 total_revenue = region_df["TOTAL_REVENUE"].sum()
 
 col1, col2, col3 = st.columns(3)
@@ -69,9 +87,8 @@ col3.metric("🛍 Channels", channel_df["SALES_CHANNEL"].nunique())
 st.divider()
 
 # -----------------------------
-# Charts Layout (2 Columns)
+# Charts Layout
 # -----------------------------
-
 col1, col2 = st.columns(2)
 
 with col1:
@@ -83,16 +100,14 @@ with col2:
     st.bar_chart(channel_df.set_index("SALES_CHANNEL")["TOTAL_REVENUE"])
 
 # -----------------------------
-# Monthly Trend (Full Width)
+# Monthly Trend
 # -----------------------------
-
 st.subheader("Monthly Sales Trend")
 st.line_chart(monthly_df.set_index("SALES_MONTH")["MONTHLY_REVENUE"])
 
 # -----------------------------
-# Bottom Section
+# Bottom Charts
 # -----------------------------
-
 col3, col4 = st.columns(2)
 
 with col3:
@@ -104,8 +119,9 @@ with col4:
     st.bar_chart(products_df.set_index("PRODUCT_NAME")["TOTAL_REVENUE"])
 
 # -----------------------------
-# Data Viewer
+# Explore Data Section
 # -----------------------------
+st.divider()
 
 st.subheader("📊 Explore Data")
 
@@ -115,13 +131,13 @@ table_option = st.selectbox(
 )
 
 if table_option == "Region Revenue":
-    st.dataframe(region_df)
+    st.dataframe(region_df, use_container_width=True)
 
 elif table_option == "Monthly Sales":
-    st.dataframe(monthly_df)
+    st.dataframe(monthly_df, use_container_width=True)
 
 elif table_option == "Category Revenue":
-    st.dataframe(category_df)
+    st.dataframe(category_df, use_container_width=True)
 
 elif table_option == "Top Products":
-    st.dataframe(products_df)
+    st.dataframe(products_df, use_container_width=True)
